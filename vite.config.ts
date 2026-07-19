@@ -2,8 +2,10 @@ import { defineConfig } from 'vite'
 import "@vitejs/plugin-react"
 import react from '@vitejs/plugin-react'
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), cloudflare()],
   server: {
     port: 3000,
     open: true
