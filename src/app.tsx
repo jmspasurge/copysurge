@@ -184,6 +184,517 @@ const AUTHORIZED_USERS = [
 ];
 const MASTER_PASSWORD = '$p@$urg3isk1nG';
 
+interface GeminiCallParams {
+  apiKey: string;
+  model: string;
+  systemInstruction: string;
+  promptPayload: string;
+}
+
+const callGeminiAPI = async ({ apiKey, model, systemInstruction, promptPayload }: GeminiCallParams) => {
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  
+  const payload = {
+    contents: [{ role: "user", parts: [{ text: promptPayload }] }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
+    systemInstruction: { parts: [{ text: systemInstruction }] }
+  };
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    if (response.status === 403) throw new Error("Access forbidden (403). Your API Key might be invalid or expired.");
+    else if (response.status === 404) throw new Error(`Model not found (404). Switch to "gemini-1.5-flash" in settings.`);
+    throw new Error(`Google API returned status ${response.status}`);
+  }
+  
+  const result = await response.json();
+  const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!jsonText) throw new Error("No payload parsed from the copy engine.");
+
+  let cleanJson = jsonText.trim();
+  if (cleanJson.startsWith("```")) {
+    cleanJson = cleanJson.replace(/^```[a-zA-Z]*\n?/i, "").replace(/\n?```$/, "");
+  }
+  
+  return JSON.parse(cleanJson.trim());
+};
+
+const handleAutoResize = (e: any) => {
+  e.target.style.height = 'auto';
+  e.target.style.height = e.target.scrollHeight + 'px';
+};
+
+const FunnelsEditor = ({ funnelsCopy, handleFunnelFieldChange, activeFunnelTab, setActiveFunnelTab, copyFunnelsToClipboard, exportFunnelsPDF, copiedBlock }: any) => (
+  <div className="animate-fadeIn">
+    <div className="mb-6 flex items-center gap-4">
+      <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest whitespace-nowrap">Generated Results</h3>
+      <div className="h-px bg-slate-300 flex-grow rounded-full"></div>
+    </div>
+    
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="lg:col-span-8 space-y-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Eye className="w-5 h-5 text-teal-600" />
+            <span className="text-sm font-bold text-slate-900">Funnels Copy Editor</span>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button onClick={copyFunnelsToClipboard} className="flex-1 sm:flex-initial bg-teal-950 hover:bg-teal-900 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
+              {copiedBlock === 'funnel_copy' ? <Check className="w-4 h-4 text-emerald-400" /> : <ClipboardCheck className="w-4 h-4 text-teal-300" />}
+              <span>{copiedBlock === 'funnel_copy' ? 'Content Copied!' : 'Copy to Google Docs'}</span>
+            </button>
+            <button onClick={exportFunnelsPDF} className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
+              <FileDown className="w-4 h-4 text-slate-300" />
+              <span>Download PDF</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex border-b border-slate-200 bg-white p-2 rounded-t-xl shadow-sm">
+          <button onClick={() => setActiveFunnelTab('optIn')} className={`flex-1 py-3 text-center text-[11px] uppercase tracking-[0.15em] font-bold transition-all rounded ${activeFunnelTab === 'optIn' ? 'bg-teal-50 text-teal-900 border-b-2 border-teal-600' : 'text-slate-500 hover:text-slate-800'}`}>1. Opt-In Page</button>
+          <button onClick={() => setActiveFunnelTab('popUpForm')} className={`flex-1 py-3 text-center text-[11px] uppercase tracking-[0.15em] font-bold transition-all rounded ${activeFunnelTab === 'popUpForm' ? 'bg-teal-50 text-teal-900 border-b-2 border-teal-600' : 'text-slate-500 hover:text-slate-800'}`}>1.A. Form Pop-Out</button>
+          <button onClick={() => setActiveFunnelTab('thankYou')} className={`flex-1 py-3 text-center text-[11px] uppercase tracking-[0.15em] font-bold transition-all rounded ${activeFunnelTab === 'thankYou' ? 'bg-teal-50 text-teal-900 border-b-2 border-teal-600' : 'text-slate-500 hover:text-slate-800'}`}>2. Thank You Page</button>
+        </div>
+
+        <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-8 md:p-12 shadow-sm text-slate-800 overflow-visible">
+          {activeFunnelTab === 'optIn' && (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Pre-Headline / Value Kicker]</span>
+                <textarea value={funnelsCopy?.optIn?.preHeadline} onChange={(e) => handleFunnelFieldChange('optIn', 'preHeadline', e.target.value)} rows={1} className="w-full font-bold text-lg text-teal-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 uppercase tracking-widest py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Main Headline Summarizing Content]</span>
+                <textarea value={funnelsCopy?.optIn?.headline} onChange={(e) => handleFunnelFieldChange('optIn', 'headline', e.target.value)} rows={1} className="w-full font-black text-3xl md:text-4xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 leading-tight py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Subheadline Outcome Focus]</span>
+                <textarea value={funnelsCopy?.optIn?.subheadline} onChange={(e) => handleFunnelFieldChange('optIn', 'subheadline', e.target.value)} rows={1} className="w-full italic font-medium text-lg md:text-xl text-slate-600 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+              
+              <div className="space-y-3 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block">[Intro Hook Section]</span>
+                <textarea value={funnelsCopy?.optIn?.introHook?.headline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'introHook', { ...funnelsCopy.optIn.introHook, headline: e.target.value })} placeholder="Section Headline" rows={1} className="w-full font-extrabold text-xl md:text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                <textarea value={funnelsCopy?.optIn?.introHook?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'introHook', { ...funnelsCopy.optIn.introHook, subheadline: e.target.value })} placeholder="Brief Subheadline" rows={1} className="w-full text-base md:text-lg font-medium text-slate-600 italic bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                <textarea value={funnelsCopy?.optIn?.introHook?.brief || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'introHook', { ...funnelsCopy.optIn.introHook, brief: e.target.value })} placeholder="Main Brief Content" rows={1} className="w-full text-base md:text-lg font-medium text-slate-800 bg-transparent focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 py-1 leading-relaxed auto-resize mt-1 resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+
+              <div className="space-y-3 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block">[Core Outcome Section]</span>
+                <textarea value={funnelsCopy?.optIn?.coreOutcome?.headline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'coreOutcome', { ...funnelsCopy.optIn.coreOutcome, headline: e.target.value })} placeholder="Section Headline" rows={1} className="w-full font-extrabold text-xl md:text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                <textarea value={funnelsCopy?.optIn?.coreOutcome?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'coreOutcome', { ...funnelsCopy.optIn.coreOutcome, subheadline: e.target.value })} placeholder="Brief Subheadline" rows={1} className="w-full text-base md:text-lg font-medium text-slate-600 italic bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                <textarea value={funnelsCopy?.optIn?.coreOutcome?.brief || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'coreOutcome', { ...funnelsCopy.optIn.coreOutcome, brief: e.target.value })} placeholder="Main Brief Content" rows={1} className="w-full text-base md:text-lg font-medium text-slate-800 bg-transparent focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 py-1 leading-relaxed auto-resize mt-1 resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+
+              <div className="space-y-3 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block">[Featured Product Showcase]</span>
+                <textarea value={funnelsCopy?.optIn?.featured?.headline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'featured', { ...funnelsCopy.optIn.featured, headline: e.target.value })} placeholder="Section Headline" rows={1} className="w-full font-extrabold text-xl md:text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                <textarea value={funnelsCopy?.optIn?.featured?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'featured', { ...funnelsCopy.optIn.featured, subheadline: e.target.value })} placeholder="Brief Subheadline" rows={1} className="w-full text-base md:text-lg font-medium text-slate-600 italic bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                <textarea value={funnelsCopy?.optIn?.featured?.brief || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'featured', { ...funnelsCopy.optIn.featured, brief: e.target.value })} placeholder="Main Brief Content" rows={1} className="w-full text-base md:text-lg font-medium text-slate-800 bg-transparent focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 py-1 leading-relaxed auto-resize mt-1 resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+
+              <div className="space-y-3 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block">[Urgency Limits & Deadlines]</span>
+                <textarea value={funnelsCopy?.optIn?.urgency?.headline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'urgency', { ...funnelsCopy.optIn.urgency, headline: e.target.value })} placeholder="Section Headline" rows={1} className="w-full font-extrabold text-xl md:text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                <textarea value={funnelsCopy?.optIn?.urgency?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'urgency', { ...funnelsCopy.optIn.urgency, subheadline: e.target.value })} placeholder="Brief Subheadline" rows={1} className="w-full text-base md:text-lg font-medium text-slate-600 italic bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                <textarea value={funnelsCopy?.optIn?.urgency?.brief || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'urgency', { ...funnelsCopy.optIn.urgency, brief: e.target.value })} placeholder="Main Brief Content" rows={1} className="w-full text-base md:text-lg font-medium text-slate-800 bg-transparent focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 py-1 leading-relaxed auto-resize mt-1 resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+
+              <div className="space-y-2 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Landing Page Primary CTA text]</span>
+                <textarea value={funnelsCopy?.optIn?.ctaButtonText || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'ctaButtonText', e.target.value)} rows={1} className="w-full font-bold text-lg md:text-xl text-teal-600 underline bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+            </div>
+          )}
+          {activeFunnelTab === 'popUpForm' && (
+            <div className="space-y-8">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Form Pop-Out Header]</span>
+                <textarea value={funnelsCopy?.popUpForm?.headline} onChange={(e) => handleFunnelFieldChange('popUpForm', 'headline', e.target.value)} rows={1} className="w-full font-extrabold text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Form Pop-Out Trust Subheading]</span>
+                <textarea value={funnelsCopy?.popUpForm?.subheadline} onChange={(e) => handleFunnelFieldChange('popUpForm', 'subheadline', e.target.value)} rows={1} className="w-full text-lg font-medium text-slate-700 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+              <div className="space-y-4 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block mb-2">Form Inputs Configured</span>
+                <div className="flex items-center gap-4 text-base">
+                  <span className="font-bold text-slate-600 w-24">Field 1:</span>
+                  <textarea value={funnelsCopy?.popUpForm?.nameFieldLabel} onChange={(e) => handleFunnelFieldChange('popUpForm', 'nameFieldLabel', e.target.value)} rows={1} className="flex-1 bg-transparent border-b border-slate-300 hover:border-teal-500 focus:outline-none text-slate-800 font-medium py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                </div>
+                <div className="flex items-center gap-4 text-base">
+                  <span className="font-bold text-slate-600 w-24">Field 2:</span>
+                  <textarea value={funnelsCopy?.popUpForm?.emailFieldLabel} onChange={(e) => handleFunnelFieldChange('popUpForm', 'emailFieldLabel', e.target.value)} rows={1} className="flex-1 bg-transparent border-b border-slate-300 hover:border-teal-500 focus:outline-none text-slate-800 font-medium py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                </div>
+                <div className="flex items-center gap-4 text-base">
+                  <span className="font-bold text-slate-600 w-24">Field 3:</span>
+                  <textarea value={funnelsCopy?.popUpForm?.phoneFieldLabel} onChange={(e) => handleFunnelFieldChange('popUpForm', 'phoneFieldLabel', e.target.value)} rows={1} className="flex-1 bg-transparent border-b border-slate-300 hover:border-teal-500 focus:outline-none text-slate-800 font-medium py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                </div>
+              </div>
+              <div className="space-y-2 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Required Privacy/SMS Opt-In Checkbox Label]</span>
+                <div className="flex items-start gap-4">
+                  <input type="checkbox" checked={true} readOnly className="mt-1 h-5 w-5 text-teal-600 border-slate-300 rounded focus:ring-teal-500" />
+                  <textarea value={funnelsCopy?.popUpForm?.complianceLabel} onChange={(e) => handleFunnelFieldChange('popUpForm', 'complianceLabel', e.target.value)} rows={1} className="w-full bg-transparent text-base font-medium text-slate-700 focus:outline-none leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                </div>
+              </div>
+              <div className="space-y-2 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Submit CTA button Text]</span>
+                <textarea value={funnelsCopy?.popUpForm?.buttonText} onChange={(e) => handleFunnelFieldChange('popUpForm', 'buttonText', e.target.value)} rows={1} className="w-full font-bold text-lg text-teal-600 underline bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+            </div>
+          )}
+          {activeFunnelTab === 'thankYou' && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Confirmation Headline]</span>
+                <textarea value={funnelsCopy?.thankYou?.headline} onChange={(e) => handleFunnelFieldChange('thankYou', 'headline', e.target.value)} rows={1} className="w-full font-bold text-2xl md:text-3xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Confirmation Subtitle]</span>
+                <textarea value={funnelsCopy?.thankYou?.subheadline} onChange={(e) => handleFunnelFieldChange('thankYou', 'subheadline', e.target.value)} rows={1} className="w-full italic font-medium text-lg text-slate-700 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Next Steps Instructions & Value Hook]</span>
+                <textarea value={funnelsCopy?.thankYou?.nextSteps} onChange={(e) => handleFunnelFieldChange('thankYou', 'nextSteps', e.target.value)} rows={1} className="w-full text-lg font-medium text-slate-800 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+              </div>
+              <div className="space-y-4 pt-6 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-teal-800 uppercase tracking-[0.15em] block">[Calendar Walkthrough Booking Module]</span>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-teal-700 uppercase tracking-[0.15em]">[Calendar Block Title]</span>
+                  <textarea value={funnelsCopy?.thankYou?.calendarBooking?.headline || ''} onChange={(e) => handleFunnelFieldChange('thankYou', 'calendarBooking', { ...funnelsCopy.thankYou.calendarBooking, headline: e.target.value })} rows={1} className="w-full font-bold text-lg md:text-xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-teal-500 focus:outline-none leading-snug auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-teal-700 uppercase tracking-[0.15em]">[Calendar Subtitle Benefits]</span>
+                  <textarea value={funnelsCopy?.thankYou?.calendarBooking?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('thankYou', 'calendarBooking', { ...funnelsCopy.thankYou.calendarBooking, subheadline: e.target.value })} rows={1} className="w-full text-base font-medium text-slate-700 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-teal-700 uppercase tracking-[0.15em]">[Booking CTA button text]</span>
+                  <textarea value={funnelsCopy?.thankYou?.calendarBooking?.ctaButtonText || ''} onChange={(e) => handleFunnelFieldChange('thankYou', 'calendarBooking', { ...funnelsCopy.thankYou.calendarBooking, ctaButtonText: e.target.value })} rows={1} className="w-full text-base font-bold text-teal-700 bg-transparent border-b border-dashed border-transparent hover:border-teal-500 focus:outline-none underline py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="lg:col-span-4 bg-teal-950 text-teal-100 rounded-2xl p-6 md:p-8 shadow-xl border border-teal-900/40 space-y-6">
+        <div className="flex items-center gap-2 text-teal-300 border-b border-teal-900 pb-4">
+          <Compass className="w-6 h-6 text-teal-400" />
+          <h4 className="font-bold text-sm uppercase tracking-[0.15em]">Funnels Directives</h4>
+        </div>
+        <div className="space-y-6 text-sm leading-relaxed font-medium">
+          <div>
+            <span className="text-[11px] font-bold text-teal-300 uppercase tracking-[0.15em] block mb-1">High-Ticket Outcomes</span>
+            <p className="text-teal-200/80">Home wellness purchases are driven by physical stress relief. Never showcase simple product specs without immediate sensory results.</p>
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-teal-300 uppercase tracking-[0.15em] block mb-1">Frictionless Flow Rules</span>
+            <p className="text-teal-200/80">The Pop-up form is optimized to prevent drop-off. By including explicit checkboxes, legal SMS validation is covered safely.</p>
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-teal-300 uppercase tracking-[0.15em] block mb-1">Zero-Bounce Calendar</span>
+            <p className="text-teal-200/80">Providing the calendar booking option immediately on the confirmation page captures up to 40% of warm leads who would otherwise drop off.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const AdsEditor = ({ adsSuite, handleAdFieldChange, regenerateSingleAd, deleteAdCard, regenIndices, triggerToast, exportAdsPDF, copiedBlock }: any) => (
+  <div className="animate-fadeIn">
+    <div className="mb-6 flex items-center gap-4">
+      <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest whitespace-nowrap">Generated Results</h3>
+      <div className="h-px bg-slate-300 flex-grow rounded-full"></div>
+    </div>
+
+    <div className="space-y-8 bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-inner">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4 max-w-5xl mx-auto">
+        <div className="flex items-center gap-2">
+          <Eye className="w-5 h-5 text-rose-600" />
+          <span className="text-sm font-bold text-slate-900">Static Ads Panel</span>
+        </div>
+        <button onClick={exportAdsPDF} className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
+          <FileDown className="w-4 h-4 text-slate-300" />
+          <span>Download Ad Matrix PDF</span>
+        </button>
+      </div>
+
+      <div className="max-w-5xl mx-auto space-y-8">
+        {(adsSuite || []).map((ad: any, idx: number) => (
+          <div key={ad.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-12 relative group">
+            
+            <div className="md:col-span-8 p-6 md:p-8 flex flex-col justify-between">
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-2">
+                <div className="flex-1">
+                  <span className="text-[11px] uppercase font-bold text-slate-400 tracking-[0.15em] block mb-1">Variation Card #{idx + 1}</span>
+                  <input type="text" value={ad.angle} onChange={(e) => handleAdFieldChange(idx, 'angle', e.target.value)} className="block font-bold text-base md:text-lg text-slate-900 bg-transparent focus:outline-none w-full" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button disabled={regenIndices[idx]} onClick={() => regenerateSingleAd(idx, ad.angle)} className="text-[11px] text-rose-600 hover:text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded uppercase tracking-[0.1em] font-bold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
+                    <RefreshCw className={`w-3.5 h-3.5 ${regenIndices[idx] ? 'animate-spin' : ''}`} />
+                    <span>{regenIndices[idx] ? 'Drafting...' : 'Revise'}</span>
+                  </button>
+                  <button onClick={() => deleteAdCard(idx)} className="text-[11px] text-slate-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-200 transition-colors px-2.5 py-1.5 rounded flex items-center gap-1" title="Delete Ad">
+                    <X className="w-4 h-4" /> <span className="uppercase tracking-wider font-bold">Delete</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white border-2 border-slate-100 rounded-xl p-8 relative flex flex-col justify-start text-slate-900 shadow-sm select-all">
+                
+                <div className="z-10 relative flex justify-between items-start mb-4">
+                  <span className="bg-rose-50 text-rose-600 font-bold text-[10px] uppercase tracking-[0.15em] px-2.5 py-1 rounded border border-rose-200">
+                    Simulated Banner Text
+                  </span>
+                  <button onClick={() => {
+                    const plainSingle = `${ad.headline.toUpperCase()}\n${ad.subheadline}\n${ad.cta}`;
+                    navigator.clipboard.writeText(plainSingle);
+                    triggerToast(`Copied Ad Card #${idx + 1} Overlay Texts!`);
+                  }} className="text-[10px] text-slate-500 hover:text-rose-600 uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 transition-colors bg-slate-50 px-3 py-1.5 rounded hover:bg-slate-100 border border-slate-200">
+                    <Copy className="w-3.5 h-3.5" /> <span>Copy Text</span>
+                  </button>
+                </div>
+
+                <div className="z-10 relative space-y-4 my-auto">
+                  <textarea 
+                    value={ad.headline} 
+                    onChange={(e) => handleAdFieldChange(idx, 'headline', e.target.value)} 
+                    rows={1} 
+                    className="w-full bg-transparent font-black text-2xl md:text-3xl text-slate-900 tracking-tight uppercase focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 leading-tight py-1 auto-resize" 
+                    onInput={handleAutoResize} 
+                  />
+                  <textarea 
+                    value={ad.subheadline} 
+                    onChange={(e) => handleAdFieldChange(idx, 'subheadline', e.target.value)} 
+                    rows={1} 
+                    className="w-full bg-transparent text-base md:text-lg font-medium text-slate-700 focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 leading-relaxed py-1 auto-resize" 
+                    onInput={handleAutoResize} 
+                  />
+                </div>
+
+                <div className="z-10 relative flex justify-start pt-6">
+                  <div className="inline-grid items-center justify-items-center bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded shadow-lg transition-colors duration-300 px-6 py-3.5 max-w-full">
+                    <input 
+                      type="text" 
+                      value={ad.cta} 
+                      onChange={(e) => handleAdFieldChange(idx, 'cta', e.target.value)} 
+                      className="col-start-1 row-start-1 bg-transparent text-white text-[11px] md:text-sm font-bold tracking-[0.15em] uppercase text-center outline-none cursor-pointer w-full z-10" />
+                    <span className="col-start-1 row-start-1 invisible whitespace-pre text-[11px] md:text-sm font-bold tracking-[0.15em] uppercase pointer-events-none px-2">
+                      {ad.cta || "CTA BUTTON"}
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div className="md:col-span-4 bg-slate-50 text-slate-800 p-6 md:p-8 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col justify-start">
+              <div className="space-y-4 w-full">
+                <div className="flex items-center gap-2 text-rose-600 border-b border-slate-200 pb-3 mb-4">
+                  <Compass className="w-5 h-5" />
+                  <span className="text-[11px] uppercase font-bold tracking-[0.15em]">Conversion Strategy</span>
+                </div>
+                <textarea 
+                  value={ad.copyReco} 
+                  onChange={(e) => handleAdFieldChange(idx, 'copyReco', e.target.value)} 
+                  rows={1} 
+                  className="w-full bg-transparent border-none p-0 text-sm font-medium text-slate-700 focus:outline-none focus:ring-0 leading-relaxed auto-resize" 
+                  onInput={handleAutoResize} 
+                />
+              </div>
+            </div>
+
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const GoogleAdsEditor = ({ googleAdsSuite, handleGoogleAdFieldChange, regenerateSingleGoogleAd, deleteGoogleAd, regenGoogleAdsIndices, copyGoogleAdsToClipboard, exportGoogleAdsPDF, copiedBlock }: any) => (
+  <div className="animate-fadeIn">
+    <div className="mb-6 flex items-center gap-4">
+      <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest whitespace-nowrap">Generated Results</h3>
+      <div className="h-px bg-slate-300 flex-grow rounded-full"></div>
+    </div>
+
+    <div className="space-y-8 bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-inner">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4 max-w-5xl mx-auto">
+        <div className="flex items-center gap-2">
+          <Search className="w-5 h-5 text-blue-600" />
+          <span className="text-sm font-bold text-slate-900">Google Ads RSA Panel</span>
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button onClick={copyGoogleAdsToClipboard} className="flex-1 sm:flex-initial bg-blue-950 hover:bg-blue-900 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
+              {copiedBlock === 'gads_copy' ? <Check className="w-4 h-4 text-blue-400" /> : <ClipboardCheck className="w-4 h-4 text-blue-300" />}
+              <span>{copiedBlock === 'gads_copy' ? 'Content Copied!' : 'Copy to Google Docs'}</span>
+            </button>
+            <button onClick={exportGoogleAdsPDF} className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
+              <FileDown className="w-4 h-4 text-slate-300" />
+              <span>Download PDF</span>
+            </button>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto space-y-8">
+        {(googleAdsSuite || []).map((ad: any, idx: number) => (
+          <div key={ad.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6 md:p-8 relative">
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-2">
+              <div className="flex-1">
+                <span className="text-[11px] uppercase font-bold text-slate-400 tracking-[0.15em] block mb-1">RSA Group #{idx + 1}</span>
+                <input type="text" value={ad.angle} onChange={(e) => handleGoogleAdFieldChange(idx, 'angle', e.target.value)} className="block font-bold text-base md:text-lg text-blue-900 bg-transparent focus:outline-none w-full" />
+              </div>
+              <div className="flex items-center gap-2">
+                <button disabled={regenGoogleAdsIndices[idx]} onClick={() => regenerateSingleGoogleAd(idx, ad.angle)} className="text-[11px] text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded uppercase tracking-[0.1em] font-bold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
+                  <RefreshCw className={`w-3.5 h-3.5 ${regenGoogleAdsIndices[idx] ? 'animate-spin' : ''}`} />
+                  <span>{regenGoogleAdsIndices[idx] ? 'Drafting...' : 'Revise'}</span>
+                </button>
+                <button onClick={() => deleteGoogleAd(idx)} className="text-[11px] text-slate-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-200 transition-colors px-2.5 py-1.5 rounded flex items-center gap-1" title="Delete Ad Group">
+                  <X className="w-4 h-4" /> <span className="uppercase tracking-wider font-bold">Delete</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Headlines (Max 30 chars)</span>
+                </div>
+                {(ad.headlines || []).map((h: string, hIdx: number) => (
+                  <div key={hIdx} className="relative">
+                    <input 
+                      type="text" 
+                      value={h} 
+                      maxLength={30}
+                      onChange={(e) => handleGoogleAdFieldChange(idx, 'headlines', e.target.value, hIdx)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-blue-400 pr-12"
+                    />
+                    <span className={`absolute right-3 top-2.5 text-xs font-bold ${(h?.length || 0) > 30 ? 'text-red-500' : 'text-slate-400'}`}>
+                      {h?.length || 0}/30
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Descriptions (Max 90 chars)</span>
+                </div>
+                {(ad.descriptions || []).map((d: string, dIdx: number) => (
+                  <div key={dIdx} className="relative">
+                    <textarea 
+                      value={d} 
+                      maxLength={90}
+                      rows={2}
+                      onChange={(e) => handleGoogleAdFieldChange(idx, 'descriptions', e.target.value, dIdx)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-blue-400 pr-12 resize-none"
+                    />
+                    <span className={`absolute right-3 bottom-3 text-xs font-bold ${(d?.length || 0) > 90 ? 'text-red-500' : 'text-slate-400'}`}>
+                      {d?.length || 0}/90
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const EmailsEditor = ({ emailsSuite, handleEmailFieldChange, regenerateSingleEmail, deleteEmail, regenEmailIndices, copyEmailsToClipboard, exportEmailsPDF, copiedBlock }: any) => (
+  <div className="animate-fadeIn">
+    <div className="mb-6 flex items-center gap-4">
+      <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest whitespace-nowrap">Generated Results</h3>
+      <div className="h-px bg-slate-300 flex-grow rounded-full"></div>
+    </div>
+
+    <div className="space-y-8 bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-inner">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4 max-w-5xl mx-auto">
+        <div className="flex items-center gap-2">
+          <Mail className="w-5 h-5 text-violet-600" />
+          <span className="text-sm font-bold text-slate-900">Email Sequence Editor</span>
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button onClick={copyEmailsToClipboard} className="flex-1 sm:flex-initial bg-violet-950 hover:bg-violet-900 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
+              {copiedBlock === 'emails_copy' ? <Check className="w-4 h-4 text-violet-400" /> : <ClipboardCheck className="w-4 h-4 text-violet-300" />}
+              <span>{copiedBlock === 'emails_copy' ? 'Content Copied!' : 'Copy to Google Docs'}</span>
+            </button>
+            <button onClick={exportEmailsPDF} className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
+              <FileDown className="w-4 h-4 text-slate-300" />
+              <span>Download PDF</span>
+            </button>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto space-y-8">
+        {(emailsSuite || []).map((email: any, idx: number) => (
+          <div key={email.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6 md:p-8 relative">
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-2">
+              <div className="flex-1">
+                <span className="text-[11px] uppercase font-bold text-slate-400 tracking-[0.15em] block mb-1">Sequence Step #{idx + 1}</span>
+                <input type="text" value={email.step} onChange={(e) => handleEmailFieldChange(idx, 'step', e.target.value)} className="block font-bold text-base md:text-lg text-violet-900 bg-transparent focus:outline-none w-full" />
+              </div>
+              <div className="flex items-center gap-2">
+                <button disabled={regenEmailIndices[idx]} onClick={() => regenerateSingleEmail(idx, email.step)} className="text-[11px] text-violet-600 hover:text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded uppercase tracking-[0.1em] font-bold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
+                  <RefreshCw className={`w-3.5 h-3.5 ${regenEmailIndices[idx] ? 'animate-spin' : ''}`} />
+                  <span>{regenEmailIndices[idx] ? 'Drafting...' : 'Revise'}</span>
+                </button>
+                <button onClick={() => deleteEmail(idx)} className="text-[11px] text-slate-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-200 transition-colors px-2.5 py-1.5 rounded flex items-center gap-1" title="Delete Email">
+                  <X className="w-4 h-4" /> <span className="uppercase tracking-wider font-bold">Delete</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Subject Line</label>
+                <input 
+                  type="text" 
+                  value={email.subjectLine} 
+                  onChange={(e) => handleEmailFieldChange(idx, 'subjectLine', e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-base text-slate-900 font-bold focus:outline-none focus:border-violet-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Preview Text</label>
+                <input 
+                  type="text" 
+                  value={email.previewText} 
+                  onChange={(e) => handleEmailFieldChange(idx, 'previewText', e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm text-slate-600 italic font-medium focus:outline-none focus:border-violet-500"
+                />
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Email Body</label>
+                <textarea 
+                  value={email.bodyText} 
+                  onChange={(e) => handleEmailFieldChange(idx, 'bodyText', e.target.value)}
+                  rows={8}
+                  className="w-full bg-transparent border-none text-base text-slate-800 font-medium focus:outline-none focus:ring-0 leading-relaxed auto-resize"
+                  onInput={handleAutoResize}
+                />
+              </div>
+            </div>
+
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('copySurge_auth') === 'true';
@@ -296,11 +807,6 @@ export default function App() {
       }
     });
   }, [referenceLinks]);
-
-  const handleAutoResize = (e: any) => {
-    e.target.style.height = 'auto';
-    e.target.style.height = e.target.scrollHeight + 'px';
-  };
 
   useEffect(() => {
     const resizeTextareas = () => {
@@ -451,7 +957,6 @@ export default function App() {
         googleDocsMerged ? `INTEGRATED GOOGLE DOC CRAWLER DATA:\n${googleDocsMerged}` : ''
       ].filter(Boolean).join('\n\n=================================\n\n');
 
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${activeApiKey}`;
       const clientNameText = clientName || '[Client Name]';
       const targetProducts = product.join(' & ');
       const requestedAdCount = Math.max(5, adCount);
@@ -633,37 +1138,13 @@ JSON EXPECTED STRUCTURE (Array of exactly ${requestedEmailCount} items):
 `;
       }
 
-      const promptParts: any[] = [{ text: promptPayload }];
-
-      const payload = {
-        contents: [{ role: "user", parts: promptParts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
-        systemInstruction: { parts: [{ text: systemInstruction }] }
-      };
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      // Delegate request to our shared helper
+      const parsedData = await callGeminiAPI({
+        apiKey: activeApiKey,
+        model: selectedModel,
+        systemInstruction,
+        promptPayload
       });
-
-      if (!response.ok) {
-        if (response.status === 403) throw new Error("Access forbidden (403). Your API Key might be invalid or expired.");
-        else if (response.status === 404) throw new Error(`Model not found (404). Switch to "gemini-1.5-flash" in settings.`);
-        throw new Error(`Google API returned status ${response.status}`);
-      }
-      
-      const result = await response.json();
-      const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!jsonText) throw new Error("No payload parsed from the copy engine.");
-
-      let cleanJson = jsonText.trim();
-      if (cleanJson.startsWith("```")) {
-        cleanJson = cleanJson.replace(/^```[a-zA-Z]*\n?/i, "").replace(/\n?```$/, "");
-      }
-      cleanJson = cleanJson.trim();
-
-      const parsedData = JSON.parse(cleanJson);
 
       if (activeTool === 'funnels') {
         setFunnelsCopy({
@@ -770,7 +1251,6 @@ JSON EXPECTED STRUCTURE (Array of exactly ${requestedEmailCount} items):
     try {
       const clientNameText = clientName || '[Client Name]';
       const targetProducts = product.join(' & ');
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${activeApiKey}`;
 
       const sysMsg = `You are an elite copywriting expert drafting ONE Static Ad Card overlay. CRITICAL STRICT ANTI-HALLUCINATION RULE: Inject an actual product name, specification, USP or direct item feature from the context documents/links. Do not hallucinate generic features. Return ONLY raw JSON.`;
       const query = `
@@ -791,38 +1271,25 @@ Return raw JSON schema ONLY:
 }
 `;
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: query }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
-          systemInstruction: { parts: [{ text: sysMsg }] }
-        })
+      const adObj = await callGeminiAPI({
+        apiKey: activeApiKey,
+        model: selectedModel,
+        systemInstruction: sysMsg,
+        promptPayload: query
       });
 
-      if (!response.ok) throw new Error();
-      const rawRes = await response.json();
-      const textVal = rawRes.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (textVal) {
-        let cleanText = textVal.trim();
-        if (cleanText.startsWith("```")) {
-          cleanText = cleanText.replace(/^```[a-zA-Z]*\n?/i, "").replace(/\n?```$/, "");
-        }
-        const adObj = JSON.parse(cleanText.trim());
-        setAdsSuite(prev => {
-          const fresh = [...prev];
-          fresh[index] = {
-            ...fresh[index],
-            headline: adObj?.headline || fresh[index].headline,
-            subheadline: adObj?.subheadline || fresh[index].subheadline,
-            cta: adObj?.cta || fresh[index].cta,
-            copyReco: adObj?.copyReco || fresh[index].copyReco
-          };
-          return fresh;
-        });
-        triggerToast(`Revised Ad Variation #${index + 1}!`);
-      }
+      setAdsSuite(prev => {
+        const fresh = [...prev];
+        fresh[index] = {
+          ...fresh[index],
+          headline: adObj?.headline || fresh[index].headline,
+          subheadline: adObj?.subheadline || fresh[index].subheadline,
+          cta: adObj?.cta || fresh[index].cta,
+          copyReco: adObj?.copyReco || fresh[index].copyReco
+        };
+        return fresh;
+      });
+      triggerToast(`Revised Ad Variation #${index + 1}!`);
     } catch (err) {
       console.error(err);
       triggerToast("Failed to revise individual variation.");
@@ -860,7 +1327,6 @@ Return raw JSON schema ONLY:
     try {
       const clientNameText = clientName || '[Client Name]';
       const targetProducts = product.join(' & ');
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${activeApiKey}`;
 
       const sysMsg = `You are an elite Google Ads search copywriter specialized in high-intent local lead generation for luxury wellness products. Return strictly valid, raw JSON object. Do not wrap inside markdown frames or write any preambles.`;
       const query = `
@@ -879,37 +1345,25 @@ Return raw JSON schema ONLY:
 }
 `;
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: query }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
-          systemInstruction: { parts: [{ text: sysMsg }] }
-        })
+      const gAdObj = await callGeminiAPI({
+        apiKey: activeApiKey,
+        model: selectedModel,
+        systemInstruction: sysMsg,
+        promptPayload: query
       });
 
-      if (!response.ok) throw new Error();
-      const rawRes = await response.json();
-      const textVal = rawRes.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (textVal) {
-        let cleanText = textVal.trim();
-        if (cleanText.startsWith("```")) {
-          cleanText = cleanText.replace(/^```[a-zA-Z]*\n?/i, "").replace(/\n?```$/, "");
-        }
-        const gAdObj = JSON.parse(cleanText.trim());
-        setGoogleAdsSuite(prev => {
-          const fresh = [...prev];
-          fresh[index] = {
-            ...fresh[index],
-            angle: gAdObj?.angle || fresh[index].angle,
-            headlines: Array.isArray(gAdObj?.headlines) ? gAdObj.headlines : fresh[index].headlines,
-            descriptions: Array.isArray(gAdObj?.descriptions) ? gAdObj.descriptions : fresh[index].descriptions
-          };
-          return fresh;
-        });
-        triggerToast(`Revised Google Ad Group #${index + 1}!`);
-      }
+      setGoogleAdsSuite(prev => {
+        const fresh = [...prev];
+        fresh[index] = {
+          ...fresh[index],
+          angle: gAdObj?.angle || fresh[index].angle,
+          headlines: Array.isArray(gAdObj?.headlines) ? gAdObj.headlines : fresh[index].headlines,
+          descriptions: Array.isArray(gAdObj?.descriptions) ? gAdObj.descriptions : fresh[index].descriptions
+        };
+        return fresh;
+      });
+      triggerToast(`Revised Google Ad Group #${index + 1}!`);
+      
     } catch (err) {
       console.error(err);
       triggerToast("Failed to revise Google Ad Group.");
@@ -947,7 +1401,6 @@ Return raw JSON schema ONLY:
     try {
       const clientNameText = clientName || '[Client Name]';
       const targetProducts = product.join(' & ');
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${activeApiKey}`;
 
       const sysMsg = `You are an elite email marketing copywriter specializing in high-converting drip sequences and promotional broadcasts. Return strictly valid, raw JSON object. Do not wrap inside markdown frames or write any preambles.`;
       const query = `
@@ -965,38 +1418,25 @@ Return raw JSON schema ONLY:
 }
 `;
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: query }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
-          systemInstruction: { parts: [{ text: sysMsg }] }
-        })
+      const emailObj = await callGeminiAPI({
+        apiKey: activeApiKey,
+        model: selectedModel,
+        systemInstruction: sysMsg,
+        promptPayload: query
       });
 
-      if (!response.ok) throw new Error();
-      const rawRes = await response.json();
-      const textVal = rawRes.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (textVal) {
-        let cleanText = textVal.trim();
-        if (cleanText.startsWith("```")) {
-          cleanText = cleanText.replace(/^```[a-zA-Z]*\n?/i, "").replace(/\n?```$/, "");
-        }
-        const emailObj = JSON.parse(cleanText.trim());
-        setEmailsSuite(prev => {
-          const fresh = [...prev];
-          fresh[index] = {
-            ...fresh[index],
-            step: emailObj?.step || fresh[index].step,
-            subjectLine: emailObj?.subjectLine || fresh[index].subjectLine,
-            previewText: emailObj?.previewText || fresh[index].previewText,
-            bodyText: emailObj?.bodyText || fresh[index].bodyText
-          };
-          return fresh;
-        });
-        triggerToast(`Revised Email #${index + 1}!`);
-      }
+      setEmailsSuite(prev => {
+        const fresh = [...prev];
+        fresh[index] = {
+          ...fresh[index],
+          step: emailObj?.step || fresh[index].step,
+          subjectLine: emailObj?.subjectLine || fresh[index].subjectLine,
+          previewText: emailObj?.previewText || fresh[index].previewText,
+          bodyText: emailObj?.bodyText || fresh[index].bodyText
+        };
+        return fresh;
+      });
+      triggerToast(`Revised Email #${index + 1}!`);
     } catch (err) {
       console.error(err);
       triggerToast("Failed to revise Email.");
@@ -1758,7 +2198,7 @@ ${email.bodyText}
         </div>
       ) : null}
 
-      {}
+      {/* Toasts */}
       {toastData && (
         <div className={`fixed top-5 right-5 z-50 flex items-center bg-slate-900 text-white border-l-4 px-4 py-3.5 rounded-lg shadow-xl transition-all duration-300 animate-fadeIn ${toastData.type === 'undo' ? 'border-amber-400' : 'border-emerald-400'}`}>
           {toastData.type === 'success' ? (
@@ -1775,6 +2215,7 @@ ${email.bodyText}
         </div>
       )}
 
+      {/* Settings Modal */}
       {showSettingsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-fadeIn border border-slate-200">
@@ -1825,6 +2266,7 @@ ${email.bodyText}
         </div>
       )}
 
+      {/* Add Client Modal */}
       {showAddClientModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-fadeIn border border-slate-200">
@@ -1856,6 +2298,7 @@ ${email.bodyText}
         </div>
       )}
 
+      {/* Inspector Modal */}
       {showInspectorModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-fadeIn border border-slate-200 flex flex-col max-h-[80vh]">
@@ -1880,7 +2323,7 @@ ${email.bodyText}
         </div>
       )}
 
-      {}
+      {/* HOME VIEW */}
       {isAuthenticated && viewState === 'home' ? (
         <div className="min-h-screen bg-slate-950 flex flex-col justify-between text-white relative overflow-hidden">
           
@@ -2086,7 +2529,6 @@ ${email.bodyText}
             </div>
           </header>
 
-          {}
           <div className="max-w-7xl w-full mx-auto px-4 md:px-8 py-8 flex-grow">
             
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 mb-8">
@@ -2396,475 +2838,58 @@ ${email.bodyText}
 
             </div>
 
-            {}
+            {/* Render Selected Tool Components */}
             {activeTool === 'funnels' && funnelsGenerated && (
-              <div className="animate-fadeIn">
-                <div className="mb-6 flex items-center gap-4">
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest whitespace-nowrap">Generated Results</h3>
-                  <div className="h-px bg-slate-300 flex-grow rounded-full"></div>
-                </div>
-                
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                  <div className="lg:col-span-8 space-y-4">
-                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex items-center gap-2">
-                        <Eye className="w-5 h-5 text-teal-600" />
-                        <span className="text-sm font-bold text-slate-900">Funnels Copy Editor</span>
-                      </div>
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <button onClick={copyFunnelsToClipboard} className="flex-1 sm:flex-initial bg-teal-950 hover:bg-teal-900 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
-                          {copiedBlock === 'funnel_copy' ? <Check className="w-4 h-4 text-emerald-400" /> : <ClipboardCheck className="w-4 h-4 text-teal-300" />}
-                          <span>{copiedBlock === 'funnel_copy' ? 'Content Copied!' : 'Copy to Google Docs'}</span>
-                        </button>
-                        <button onClick={exportFunnelsPDF} className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
-                          <FileDown className="w-4 h-4 text-slate-300" />
-                          <span>Download PDF</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex border-b border-slate-200 bg-white p-2 rounded-t-xl shadow-sm">
-                      <button onClick={() => setActiveFunnelTab('optIn')} className={`flex-1 py-3 text-center text-[11px] uppercase tracking-[0.15em] font-bold transition-all rounded ${activeFunnelTab === 'optIn' ? 'bg-teal-50 text-teal-900 border-b-2 border-teal-600' : 'text-slate-500 hover:text-slate-800'}`}>1. Opt-In Page</button>
-                      <button onClick={() => setActiveFunnelTab('popUpForm')} className={`flex-1 py-3 text-center text-[11px] uppercase tracking-[0.15em] font-bold transition-all rounded ${activeFunnelTab === 'popUpForm' ? 'bg-teal-50 text-teal-900 border-b-2 border-teal-600' : 'text-slate-500 hover:text-slate-800'}`}>1.A. Form Pop-Out</button>
-                      <button onClick={() => setActiveFunnelTab('thankYou')} className={`flex-1 py-3 text-center text-[11px] uppercase tracking-[0.15em] font-bold transition-all rounded ${activeFunnelTab === 'thankYou' ? 'bg-teal-50 text-teal-900 border-b-2 border-teal-600' : 'text-slate-500 hover:text-slate-800'}`}>2. Thank You Page</button>
-                    </div>
-
-                    <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-8 md:p-12 shadow-sm text-slate-800 overflow-visible">
-                      {activeFunnelTab === 'optIn' && (
-                        <div className="space-y-6">
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Pre-Headline / Value Kicker]</span>
-                            <textarea value={funnelsCopy?.optIn?.preHeadline} onChange={(e) => handleFunnelFieldChange('optIn', 'preHeadline', e.target.value)} rows={1} className="w-full font-bold text-lg text-teal-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 uppercase tracking-widest py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Main Headline Summarizing Content]</span>
-                            <textarea value={funnelsCopy?.optIn?.headline} onChange={(e) => handleFunnelFieldChange('optIn', 'headline', e.target.value)} rows={1} className="w-full font-black text-3xl md:text-4xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 leading-tight py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Subheadline Outcome Focus]</span>
-                            <textarea value={funnelsCopy?.optIn?.subheadline} onChange={(e) => handleFunnelFieldChange('optIn', 'subheadline', e.target.value)} rows={1} className="w-full italic font-medium text-lg md:text-xl text-slate-600 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                          
-                          <div className="space-y-3 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block">[Intro Hook Section]</span>
-                            <textarea value={funnelsCopy?.optIn?.introHook?.headline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'introHook', { ...funnelsCopy.optIn.introHook, headline: e.target.value })} placeholder="Section Headline" rows={1} className="w-full font-extrabold text-xl md:text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            <textarea value={funnelsCopy?.optIn?.introHook?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'introHook', { ...funnelsCopy.optIn.introHook, subheadline: e.target.value })} placeholder="Brief Subheadline" rows={1} className="w-full text-base md:text-lg font-medium text-slate-600 italic bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            <textarea value={funnelsCopy?.optIn?.introHook?.brief || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'introHook', { ...funnelsCopy.optIn.introHook, brief: e.target.value })} placeholder="Main Brief Content" rows={1} className="w-full text-base md:text-lg font-medium text-slate-800 bg-transparent focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 py-1 leading-relaxed auto-resize mt-1 resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-
-                          <div className="space-y-3 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block">[Core Outcome Section]</span>
-                            <textarea value={funnelsCopy?.optIn?.coreOutcome?.headline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'coreOutcome', { ...funnelsCopy.optIn.coreOutcome, headline: e.target.value })} placeholder="Section Headline" rows={1} className="w-full font-extrabold text-xl md:text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            <textarea value={funnelsCopy?.optIn?.coreOutcome?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'coreOutcome', { ...funnelsCopy.optIn.coreOutcome, subheadline: e.target.value })} placeholder="Brief Subheadline" rows={1} className="w-full text-base md:text-lg font-medium text-slate-600 italic bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            <textarea value={funnelsCopy?.optIn?.coreOutcome?.brief || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'coreOutcome', { ...funnelsCopy.optIn.coreOutcome, brief: e.target.value })} placeholder="Main Brief Content" rows={1} className="w-full text-base md:text-lg font-medium text-slate-800 bg-transparent focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 py-1 leading-relaxed auto-resize mt-1 resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-
-                          <div className="space-y-3 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block">[Featured Product Showcase]</span>
-                            <textarea value={funnelsCopy?.optIn?.featured?.headline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'featured', { ...funnelsCopy.optIn.featured, headline: e.target.value })} placeholder="Section Headline" rows={1} className="w-full font-extrabold text-xl md:text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            <textarea value={funnelsCopy?.optIn?.featured?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'featured', { ...funnelsCopy.optIn.featured, subheadline: e.target.value })} placeholder="Brief Subheadline" rows={1} className="w-full text-base md:text-lg font-medium text-slate-600 italic bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            <textarea value={funnelsCopy?.optIn?.featured?.brief || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'featured', { ...funnelsCopy.optIn.featured, brief: e.target.value })} placeholder="Main Brief Content" rows={1} className="w-full text-base md:text-lg font-medium text-slate-800 bg-transparent focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 py-1 leading-relaxed auto-resize mt-1 resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-
-                          <div className="space-y-3 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block">[Urgency Limits & Deadlines]</span>
-                            <textarea value={funnelsCopy?.optIn?.urgency?.headline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'urgency', { ...funnelsCopy.optIn.urgency, headline: e.target.value })} placeholder="Section Headline" rows={1} className="w-full font-extrabold text-xl md:text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            <textarea value={funnelsCopy?.optIn?.urgency?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'urgency', { ...funnelsCopy.optIn.urgency, subheadline: e.target.value })} placeholder="Brief Subheadline" rows={1} className="w-full text-base md:text-lg font-medium text-slate-600 italic bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            <textarea value={funnelsCopy?.optIn?.urgency?.brief || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'urgency', { ...funnelsCopy.optIn.urgency, brief: e.target.value })} placeholder="Main Brief Content" rows={1} className="w-full text-base md:text-lg font-medium text-slate-800 bg-transparent focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 py-1 leading-relaxed auto-resize mt-1 resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-
-                          <div className="space-y-2 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Landing Page Primary CTA text]</span>
-                            <textarea value={funnelsCopy?.optIn?.ctaButtonText || ''} onChange={(e) => handleFunnelFieldChange('optIn', 'ctaButtonText', e.target.value)} rows={1} className="w-full font-bold text-lg md:text-xl text-teal-600 underline bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                        </div>
-                      )}
-                      {activeFunnelTab === 'popUpForm' && (
-                        <div className="space-y-8">
-                          <div className="space-y-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Form Pop-Out Header]</span>
-                            <textarea value={funnelsCopy?.popUpForm?.headline} onChange={(e) => handleFunnelFieldChange('popUpForm', 'headline', e.target.value)} rows={1} className="w-full font-extrabold text-2xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                          <div className="space-y-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Form Pop-Out Trust Subheading]</span>
-                            <textarea value={funnelsCopy?.popUpForm?.subheadline} onChange={(e) => handleFunnelFieldChange('popUpForm', 'subheadline', e.target.value)} rows={1} className="w-full text-lg font-medium text-slate-700 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                          <div className="space-y-4 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-teal-600 uppercase tracking-[0.15em] block mb-2">Form Inputs Configured</span>
-                            <div className="flex items-center gap-4 text-base">
-                              <span className="font-bold text-slate-600 w-24">Field 1:</span>
-                              <textarea value={funnelsCopy?.popUpForm?.nameFieldLabel} onChange={(e) => handleFunnelFieldChange('popUpForm', 'nameFieldLabel', e.target.value)} rows={1} className="flex-1 bg-transparent border-b border-slate-300 hover:border-teal-500 focus:outline-none text-slate-800 font-medium py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            </div>
-                            <div className="flex items-center gap-4 text-base">
-                              <span className="font-bold text-slate-600 w-24">Field 2:</span>
-                              <textarea value={funnelsCopy?.popUpForm?.emailFieldLabel} onChange={(e) => handleFunnelFieldChange('popUpForm', 'emailFieldLabel', e.target.value)} rows={1} className="flex-1 bg-transparent border-b border-slate-300 hover:border-teal-500 focus:outline-none text-slate-800 font-medium py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            </div>
-                            <div className="flex items-center gap-4 text-base">
-                              <span className="font-bold text-slate-600 w-24">Field 3:</span>
-                              <textarea value={funnelsCopy?.popUpForm?.phoneFieldLabel} onChange={(e) => handleFunnelFieldChange('popUpForm', 'phoneFieldLabel', e.target.value)} rows={1} className="flex-1 bg-transparent border-b border-slate-300 hover:border-teal-500 focus:outline-none text-slate-800 font-medium py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            </div>
-                          </div>
-                          <div className="space-y-2 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Required Privacy/SMS Opt-In Checkbox Label]</span>
-                            <div className="flex items-start gap-4">
-                              <input type="checkbox" checked={true} readOnly className="mt-1 h-5 w-5 text-teal-600 border-slate-300 rounded focus:ring-teal-500" />
-                              <textarea value={funnelsCopy?.popUpForm?.complianceLabel} onChange={(e) => handleFunnelFieldChange('popUpForm', 'complianceLabel', e.target.value)} rows={1} className="w-full bg-transparent text-base font-medium text-slate-700 focus:outline-none leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            </div>
-                          </div>
-                          <div className="space-y-2 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Submit CTA button Text]</span>
-                            <textarea value={funnelsCopy?.popUpForm?.buttonText} onChange={(e) => handleFunnelFieldChange('popUpForm', 'buttonText', e.target.value)} rows={1} className="w-full font-bold text-lg text-teal-600 underline bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                        </div>
-                      )}
-                      {activeFunnelTab === 'thankYou' && (
-                        <div className="space-y-6">
-                          <div className="space-y-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Confirmation Headline]</span>
-                            <textarea value={funnelsCopy?.thankYou?.headline} onChange={(e) => handleFunnelFieldChange('thankYou', 'headline', e.target.value)} rows={1} className="w-full font-bold text-2xl md:text-3xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                          <div className="space-y-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Confirmation Subtitle]</span>
-                            <textarea value={funnelsCopy?.thankYou?.subheadline} onChange={(e) => handleFunnelFieldChange('thankYou', 'subheadline', e.target.value)} rows={1} className="w-full italic font-medium text-lg text-slate-700 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                          <div className="space-y-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block">[Next Steps Instructions & Value Hook]</span>
-                            <textarea value={funnelsCopy?.thankYou?.nextSteps} onChange={(e) => handleFunnelFieldChange('thankYou', 'nextSteps', e.target.value)} rows={1} className="w-full text-lg font-medium text-slate-800 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none focus:border-teal-500 py-1 leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                          </div>
-                          <div className="space-y-4 pt-6 border-t border-slate-100">
-                            <span className="text-[10px] font-bold text-teal-800 uppercase tracking-[0.15em] block">[Calendar Walkthrough Booking Module]</span>
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-teal-700 uppercase tracking-[0.15em]">[Calendar Block Title]</span>
-                              <textarea value={funnelsCopy?.thankYou?.calendarBooking?.headline || ''} onChange={(e) => handleFunnelFieldChange('thankYou', 'calendarBooking', { ...funnelsCopy.thankYou.calendarBooking, headline: e.target.value })} rows={1} className="w-full font-bold text-lg md:text-xl text-slate-900 bg-transparent border-b border-dashed border-transparent hover:border-teal-500 focus:outline-none leading-snug auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            </div>
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-teal-700 uppercase tracking-[0.15em]">[Calendar Subtitle Benefits]</span>
-                              <textarea value={funnelsCopy?.thankYou?.calendarBooking?.subheadline || ''} onChange={(e) => handleFunnelFieldChange('thankYou', 'calendarBooking', { ...funnelsCopy.thankYou.calendarBooking, subheadline: e.target.value })} rows={1} className="w-full text-base font-medium text-slate-700 bg-transparent border-b border-dashed border-transparent hover:border-slate-300 focus:outline-none leading-relaxed auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            </div>
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-teal-700 uppercase tracking-[0.15em]">[Booking CTA button text]</span>
-                              <textarea value={funnelsCopy?.thankYou?.calendarBooking?.ctaButtonText || ''} onChange={(e) => handleFunnelFieldChange('thankYou', 'calendarBooking', { ...funnelsCopy.thankYou.calendarBooking, ctaButtonText: e.target.value })} rows={1} className="w-full text-base font-bold text-teal-700 bg-transparent border-b border-dashed border-transparent hover:border-teal-500 focus:outline-none underline py-1 auto-resize resize-none overflow-hidden" onInput={handleAutoResize} />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-4 bg-teal-950 text-teal-100 rounded-2xl p-6 md:p-8 shadow-xl border border-teal-900/40 space-y-6">
-                    <div className="flex items-center gap-2 text-teal-300 border-b border-teal-900 pb-4">
-                      <Compass className="w-6 h-6 text-teal-400" />
-                      <h4 className="font-bold text-sm uppercase tracking-[0.15em]">Funnels Directives</h4>
-                    </div>
-                    <div className="space-y-6 text-sm leading-relaxed font-medium">
-                      <div>
-                        <span className="text-[11px] font-bold text-teal-300 uppercase tracking-[0.15em] block mb-1">High-Ticket Outcomes</span>
-                        <p className="text-teal-200/80">Home wellness purchases are driven by physical stress relief. Never showcase simple product specs without immediate sensory results.</p>
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-teal-300 uppercase tracking-[0.15em] block mb-1">Frictionless Flow Rules</span>
-                        <p className="text-teal-200/80">The Pop-up form is optimized to prevent drop-off. By including explicit checkboxes, legal SMS validation is covered safely.</p>
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold text-teal-300 uppercase tracking-[0.15em] block mb-1">Zero-Bounce Calendar</span>
-                        <p className="text-teal-200/80">Providing the calendar booking option immediately on the confirmation page captures up to 40% of warm leads who would otherwise drop off.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <FunnelsEditor 
+                funnelsCopy={funnelsCopy} 
+                handleFunnelFieldChange={handleFunnelFieldChange}
+                activeFunnelTab={activeFunnelTab}
+                setActiveFunnelTab={setActiveFunnelTab}
+                copyFunnelsToClipboard={copyFunnelsToClipboard}
+                exportFunnelsPDF={exportFunnelsPDF}
+                copiedBlock={copiedBlock}
+              />
             )}
 
-            {}
             {activeTool === 'ads' && adsGenerated && (
-              <div className="animate-fadeIn">
-                <div className="mb-6 flex items-center gap-4">
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest whitespace-nowrap">Generated Results</h3>
-                  <div className="h-px bg-slate-300 flex-grow rounded-full"></div>
-                </div>
-
-                <div className="space-y-8 bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-inner">
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4 max-w-5xl mx-auto">
-                    <div className="flex items-center gap-2">
-                      <Eye className="w-5 h-5 text-rose-600" />
-                      <span className="text-sm font-bold text-slate-900">Static Ads Panel</span>
-                    </div>
-                    <button onClick={exportAdsPDF} className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
-                      <FileDown className="w-4 h-4 text-slate-300" />
-                      <span>Download Ad Matrix PDF</span>
-                    </button>
-                  </div>
-
-                  <div className="max-w-5xl mx-auto space-y-8">
-                    {(adsSuite || []).map((ad, idx) => (
-                      <div key={ad.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden grid grid-cols-1 md:grid-cols-12 relative group">
-                        
-                        <div className="md:col-span-8 p-6 md:p-8 flex flex-col justify-between">
-                          <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-2">
-                            <div className="flex-1">
-                              <span className="text-[11px] uppercase font-bold text-slate-400 tracking-[0.15em] block mb-1">Variation Card #{idx + 1}</span>
-                              <input type="text" value={ad.angle} onChange={(e) => handleAdFieldChange(idx, 'angle', e.target.value)} className="block font-bold text-base md:text-lg text-slate-900 bg-transparent focus:outline-none w-full" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button disabled={regenIndices[idx]} onClick={() => regenerateSingleAd(idx, ad.angle)} className="text-[11px] text-rose-600 hover:text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded uppercase tracking-[0.1em] font-bold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
-                                <RefreshCw className={`w-3.5 h-3.5 ${regenIndices[idx] ? 'animate-spin' : ''}`} />
-                                <span>{regenIndices[idx] ? 'Drafting...' : 'Revise'}</span>
-                              </button>
-                              <button onClick={() => deleteAdCard(idx)} className="text-[11px] text-slate-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-200 transition-colors px-2.5 py-1.5 rounded flex items-center gap-1" title="Delete Ad">
-                                <X className="w-4 h-4" /> <span className="uppercase tracking-wider font-bold">Delete</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="bg-white border-2 border-slate-100 rounded-xl p-8 relative flex flex-col justify-start text-slate-900 shadow-sm select-all">
-                            
-                            <div className="z-10 relative flex justify-between items-start mb-4">
-                              <span className="bg-rose-50 text-rose-600 font-bold text-[10px] uppercase tracking-[0.15em] px-2.5 py-1 rounded border border-rose-200">
-                                Simulated Banner Text
-                              </span>
-                              <button onClick={() => {
-                                const plainSingle = `${ad.headline.toUpperCase()}\n${ad.subheadline}\n${ad.cta}`;
-                                navigator.clipboard.writeText(plainSingle);
-                                triggerToast(`Copied Ad Card #${idx + 1} Overlay Texts!`);
-                              }} className="text-[10px] text-slate-500 hover:text-rose-600 uppercase font-bold tracking-[0.15em] flex items-center gap-1.5 transition-colors bg-slate-50 px-3 py-1.5 rounded hover:bg-slate-100 border border-slate-200">
-                                <Copy className="w-3.5 h-3.5" /> <span>Copy Text</span>
-                              </button>
-                            </div>
-
-                            <div className="z-10 relative space-y-4 my-auto">
-                              <textarea 
-                                value={ad.headline} 
-                                onChange={(e) => handleAdFieldChange(idx, 'headline', e.target.value)} 
-                                rows={1} 
-                                className="w-full bg-transparent font-black text-2xl md:text-3xl text-slate-900 tracking-tight uppercase focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 leading-tight py-1 auto-resize" 
-                                onInput={handleAutoResize} 
-                              />
-                              <textarea 
-                                value={ad.subheadline} 
-                                onChange={(e) => handleAdFieldChange(idx, 'subheadline', e.target.value)} 
-                                rows={1} 
-                                className="w-full bg-transparent text-base md:text-lg font-medium text-slate-700 focus:outline-none border-b border-dashed border-transparent hover:border-slate-300 leading-relaxed py-1 auto-resize" 
-                                onInput={handleAutoResize} 
-                              />
-                            </div>
-
-                            <div className="z-10 relative flex justify-start pt-6">
-                              <div className="inline-grid items-center justify-items-center bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded shadow-lg transition-colors duration-300 px-6 py-3.5 max-w-full">
-                                <input 
-                                  type="text" 
-                                  value={ad.cta} 
-                                  onChange={(e) => handleAdFieldChange(idx, 'cta', e.target.value)} 
-                                  className="col-start-1 row-start-1 bg-transparent text-white text-[11px] md:text-sm font-bold tracking-[0.15em] uppercase text-center outline-none cursor-pointer w-full z-10" />
-                                <span className="col-start-1 row-start-1 invisible whitespace-pre text-[11px] md:text-sm font-bold tracking-[0.15em] uppercase pointer-events-none px-2">
-                                  {ad.cta || "CTA BUTTON"}
-                                </span>
-                              </div>
-                            </div>
-
-                          </div>
-                        </div>
-
-                        <div className="md:col-span-4 bg-slate-50 text-slate-800 p-6 md:p-8 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col justify-start">
-                          <div className="space-y-4 w-full">
-                            <div className="flex items-center gap-2 text-rose-600 border-b border-slate-200 pb-3 mb-4">
-                              <Compass className="w-5 h-5" />
-                              <span className="text-[11px] uppercase font-bold tracking-[0.15em]">Conversion Strategy</span>
-                            </div>
-                            <textarea 
-                              value={ad.copyReco} 
-                              onChange={(e) => handleAdFieldChange(idx, 'copyReco', e.target.value)} 
-                              rows={1} 
-                              className="w-full bg-transparent border-none p-0 text-sm font-medium text-slate-700 focus:outline-none focus:ring-0 leading-relaxed auto-resize" 
-                              onInput={handleAutoResize} 
-                            />
-                          </div>
-                        </div>
-
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <AdsEditor 
+                adsSuite={adsSuite} 
+                handleAdFieldChange={handleAdFieldChange}
+                regenerateSingleAd={regenerateSingleAd}
+                deleteAdCard={deleteAdCard}
+                regenIndices={regenIndices}
+                triggerToast={triggerToast}
+                exportAdsPDF={exportAdsPDF}
+                copiedBlock={copiedBlock}
+              />
             )}
 
-            {}
             {activeTool === 'googleAds' && googleAdsGenerated && (
-              <div className="animate-fadeIn">
-                <div className="mb-6 flex items-center gap-4">
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest whitespace-nowrap">Generated Results</h3>
-                  <div className="h-px bg-slate-300 flex-grow rounded-full"></div>
-                </div>
-
-                <div className="space-y-8 bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-inner">
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4 max-w-5xl mx-auto">
-                    <div className="flex items-center gap-2">
-                      <Search className="w-5 h-5 text-blue-600" />
-                      <span className="text-sm font-bold text-slate-900">Google Ads RSA Panel</span>
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <button onClick={copyGoogleAdsToClipboard} className="flex-1 sm:flex-initial bg-blue-950 hover:bg-blue-900 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
-                          {copiedBlock === 'gads_copy' ? <Check className="w-4 h-4 text-blue-400" /> : <ClipboardCheck className="w-4 h-4 text-blue-300" />}
-                          <span>{copiedBlock === 'gads_copy' ? 'Content Copied!' : 'Copy to Google Docs'}</span>
-                        </button>
-                        <button onClick={exportGoogleAdsPDF} className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
-                          <FileDown className="w-4 h-4 text-slate-300" />
-                          <span>Download PDF</span>
-                        </button>
-                    </div>
-                  </div>
-
-                  <div className="max-w-5xl mx-auto space-y-8">
-                    {(googleAdsSuite || []).map((ad, idx) => (
-                      <div key={ad.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6 md:p-8 relative">
-                        <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-2">
-                          <div className="flex-1">
-                            <span className="text-[11px] uppercase font-bold text-slate-400 tracking-[0.15em] block mb-1">RSA Group #{idx + 1}</span>
-                            <input type="text" value={ad.angle} onChange={(e) => handleGoogleAdFieldChange(idx, 'angle', e.target.value)} className="block font-bold text-base md:text-lg text-blue-900 bg-transparent focus:outline-none w-full" />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button disabled={regenGoogleAdsIndices[idx]} onClick={() => regenerateSingleGoogleAd(idx, ad.angle)} className="text-[11px] text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded uppercase tracking-[0.1em] font-bold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
-                              <RefreshCw className={`w-3.5 h-3.5 ${regenGoogleAdsIndices[idx] ? 'animate-spin' : ''}`} />
-                              <span>{regenGoogleAdsIndices[idx] ? 'Drafting...' : 'Revise'}</span>
-                            </button>
-                            <button onClick={() => deleteGoogleAd(idx)} className="text-[11px] text-slate-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-200 transition-colors px-2.5 py-1.5 rounded flex items-center gap-1" title="Delete Ad Group">
-                              <X className="w-4 h-4" /> <span className="uppercase tracking-wider font-bold">Delete</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Headlines (Max 30 chars)</span>
-                            </div>
-                            {(ad.headlines || []).map((h: string, hIdx: number) => (
-                              <div key={hIdx} className="relative">
-                                <input 
-                                  type="text" 
-                                  value={h} 
-                                  maxLength={30}
-                                  onChange={(e) => handleGoogleAdFieldChange(idx, 'headlines', e.target.value, hIdx)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-blue-400 pr-12"
-                                />
-                                <span className={`absolute right-3 top-2.5 text-xs font-bold ${(h?.length || 0) > 30 ? 'text-red-500' : 'text-slate-400'}`}>
-                                  {h?.length || 0}/30
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Descriptions (Max 90 chars)</span>
-                            </div>
-                            {(ad.descriptions || []).map((d: string, dIdx: number) => (
-                              <div key={dIdx} className="relative">
-                                <textarea 
-                                  value={d} 
-                                  maxLength={90}
-                                  rows={2}
-                                  onChange={(e) => handleGoogleAdFieldChange(idx, 'descriptions', e.target.value, dIdx)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-blue-400 pr-12 resize-none"
-                                />
-                                <span className={`absolute right-3 bottom-3 text-xs font-bold ${(d?.length || 0) > 90 ? 'text-red-500' : 'text-slate-400'}`}>
-                                  {d?.length || 0}/90
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <GoogleAdsEditor 
+                googleAdsSuite={googleAdsSuite}
+                handleGoogleAdFieldChange={handleGoogleAdFieldChange}
+                regenerateSingleGoogleAd={regenerateSingleGoogleAd}
+                deleteGoogleAd={deleteGoogleAd}
+                regenGoogleAdsIndices={regenGoogleAdsIndices}
+                copyGoogleAdsToClipboard={copyGoogleAdsToClipboard}
+                exportGoogleAdsPDF={exportGoogleAdsPDF}
+                copiedBlock={copiedBlock}
+              />
             )}
 
-            {}
             {activeTool === 'emails' && emailsGenerated && (
-              <div className="animate-fadeIn">
-                <div className="mb-6 flex items-center gap-4">
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-widest whitespace-nowrap">Generated Results</h3>
-                  <div className="h-px bg-slate-300 flex-grow rounded-full"></div>
-                </div>
-
-                <div className="space-y-8 bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-inner">
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-4 max-w-5xl mx-auto">
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-5 h-5 text-violet-600" />
-                      <span className="text-sm font-bold text-slate-900">Email Sequence Editor</span>
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <button onClick={copyEmailsToClipboard} className="flex-1 sm:flex-initial bg-violet-950 hover:bg-violet-900 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
-                          {copiedBlock === 'emails_copy' ? <Check className="w-4 h-4 text-violet-400" /> : <ClipboardCheck className="w-4 h-4 text-violet-300" />}
-                          <span>{copiedBlock === 'emails_copy' ? 'Content Copied!' : 'Copy to Google Docs'}</span>
-                        </button>
-                        <button onClick={exportEmailsPDF} className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold uppercase tracking-[0.15em] px-4 py-3 rounded shadow flex items-center justify-center gap-2">
-                          <FileDown className="w-4 h-4 text-slate-300" />
-                          <span>Download PDF</span>
-                        </button>
-                    </div>
-                  </div>
-
-                  <div className="max-w-5xl mx-auto space-y-8">
-                    {(emailsSuite || []).map((email, idx) => (
-                      <div key={email.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6 md:p-8 relative">
-                        <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-2">
-                          <div className="flex-1">
-                            <span className="text-[11px] uppercase font-bold text-slate-400 tracking-[0.15em] block mb-1">Sequence Step #{idx + 1}</span>
-                            <input type="text" value={email.step} onChange={(e) => handleEmailFieldChange(idx, 'step', e.target.value)} className="block font-bold text-base md:text-lg text-violet-900 bg-transparent focus:outline-none w-full" />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button disabled={regenEmailIndices[idx]} onClick={() => regenerateSingleEmail(idx, email.step)} className="text-[11px] text-violet-600 hover:text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded uppercase tracking-[0.1em] font-bold transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm">
-                              <RefreshCw className={`w-3.5 h-3.5 ${regenEmailIndices[idx] ? 'animate-spin' : ''}`} />
-                              <span>{regenEmailIndices[idx] ? 'Drafting...' : 'Revise'}</span>
-                            </button>
-                            <button onClick={() => deleteEmail(idx)} className="text-[11px] text-slate-500 hover:bg-rose-50 hover:text-rose-600 border border-transparent hover:border-rose-200 transition-colors px-2.5 py-1.5 rounded flex items-center gap-1" title="Delete Email">
-                              <X className="w-4 h-4" /> <span className="uppercase tracking-wider font-bold">Delete</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-6">
-                          <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Subject Line</label>
-                            <input 
-                              type="text" 
-                              value={email.subjectLine} 
-                              onChange={(e) => handleEmailFieldChange(idx, 'subjectLine', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-base text-slate-900 font-bold focus:outline-none focus:border-violet-500"
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Preview Text</label>
-                            <input 
-                              type="text" 
-                              value={email.previewText} 
-                              onChange={(e) => handleEmailFieldChange(idx, 'previewText', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm text-slate-600 italic font-medium focus:outline-none focus:border-violet-500"
-                            />
-                          </div>
-
-                          <div className="space-y-2 pt-2 border-t border-slate-100">
-                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Email Body</label>
-                            <textarea 
-                              value={email.bodyText} 
-                              onChange={(e) => handleEmailFieldChange(idx, 'bodyText', e.target.value)}
-                              rows={8}
-                              className="w-full bg-transparent border-none text-base text-slate-800 font-medium focus:outline-none focus:ring-0 leading-relaxed auto-resize"
-                              onInput={handleAutoResize}
-                            />
-                          </div>
-                        </div>
-
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <EmailsEditor 
+                emailsSuite={emailsSuite}
+                handleEmailFieldChange={handleEmailFieldChange}
+                regenerateSingleEmail={regenerateSingleEmail}
+                deleteEmail={deleteEmail}
+                regenEmailIndices={regenEmailIndices}
+                copyEmailsToClipboard={copyEmailsToClipboard}
+                exportEmailsPDF={exportEmailsPDF}
+                copiedBlock={copiedBlock}
+              />
             )}
+
           </div>
 
           <footer className="bg-slate-900 border-t border-slate-800 py-6 px-4 md:px-8 text-center text-xs text-slate-500 mt-12">
